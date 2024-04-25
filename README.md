@@ -1,6 +1,6 @@
-# How To #1 on Gelato: Web3Auth FE inplementation
+# How To #1 on Gelato: Web3Auth FE implementation
 
-This project showcases a React implementation of how to use web3Auth On Gelato Raas.
+This project showcases a React implementation of web3Auth On Gelato Raas.
 
 ## Web3 App
 
