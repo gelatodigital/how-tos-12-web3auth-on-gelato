@@ -3,6 +3,7 @@ import { Status, State, TaskState, Message } from "../../types/Status";
 import { BiRefresh, BiCopy } from "react-icons/bi";
 import { interval, Subject, takeUntil } from "rxjs";
 import {  } from "ethers";
+import web3AuthLogo from "../../assets/images/web-3-auth-logo-dark.svg"
 import { CHAIN_NAMESPACES, WALLET_ADAPTERS } from "@web3auth/base";
 import { Web3Auth } from "@web3auth/modal";
 import { Dropdown } from "react-dropdown-now";
@@ -13,9 +14,9 @@ import axios from "axios";
 import Loading from "../Loading";
 import Button from "../Button";
 import { Link, Route, Routes,useLocation,useParams,useNavigate } from "react-router-dom"
-
+import "./globals"
 import { ethers , Signer, Contract} from "ethers";
-
+import { LivenessEmbed } from  "@web3auth/kyc-embed";
 
 import { counterAbi } from "../../assets/contracts/counterAbi";
 
@@ -25,9 +26,18 @@ import "react-dropdown-now/style.css";
 import { RAAS_NETWORKS } from "../../networks";
 import { GELATO_KEY } from "../../constants";
 import { CallWithERC2771Request, GelatoRelay, SignerOrProvider } from "@gelatonetwork/relay-sdk";
+
+
+
 const App = () => {
   const navigate = useNavigate()
 
+  const embedInstance = new LivenessEmbed({
+    web3AuthClientId: "BFolnrXUpJ8WScbI0MHGllgsP4Jgyy9tuAyfd4rLJ0d07b1iGMhZw3Eu2E10HECY2KIqYczag4_Z4q7KsEojUWU",
+    web3AuthNetwork:  "sapphire_devnet",
+  });
+
+  
   let destroyFetchTask: Subject<void> = new Subject();
   let txHash: string | undefined;
   const query = useQuery()
@@ -55,7 +65,7 @@ const App = () => {
     taskId: undefined,
   });
   const [counter, setCounter] = useState<string>("Loading");
-  const [safe, setSafe] = useState<string | undefined>();
+  const [liveness, setLiveness] = useState<boolean>(false)
   const [signerAddress, setSignerAddress] = useState<string | null>(null);
 
   const [connectStatus, setConnectStatus] = useState<Status | null>({
@@ -67,6 +77,45 @@ const selectRollup = async (network:any)=> {
   console.log(network)
   navigate(`/?network=${network.value}`)
 }
+
+const cb=async (method:string,params?:any) => {
+  console.log(method)
+  console.log(params)
+  if (method === "on_cancelled_liveness") {
+    console.log("user has cancelled the liveness check before finished");
+    // do your thing   
+  } else  if(method == "on_complete_liveness") {
+    let isAlive = params.result == "Success" ? true :false
+     
+     if (isAlive){
+          setLiveness(true)
+       }
+  }
+}
+
+const onLiveness= async () => {
+  setLoading(true);
+  setConnectStatus({
+    state: State.failed,
+    message: "Waiting for Disconnection",
+  });
+
+ if(!embedInstance.isInitialized){
+  console.log(362)
+  await embedInstance.init();
+  embedInstance.subscribeEvents(cb);
+
+ }
+
+ 
+  embedInstance.initLivenessCheck({
+    // this field is intended for the usage before login
+    // setting this to `true` will allow users to access the liveness check without logging in
+    // for the liveness check usage after login, please see the next section
+    allowUnauthenticatedAccess: true,
+  });
+  setLoading(false);
+};
 
   const onDisconnect = async () => {
     setLoading(true);
@@ -350,7 +399,8 @@ const selectRollup = async (network:any)=> {
       if (provider != null) {
         return;
       }
-   
+
+
       if (networkSearch == null || RAAS_NETWORKS[networkSearch] == undefined ){
     
         navigate('/?network=blueberry')
@@ -375,9 +425,13 @@ const selectRollup = async (network:any)=> {
         />
            <Routes>
        <Route path="/" element=
-       {<div>
+       {
+        <div>
+      {liveness ? (
+       <div>
         {connectStatus?.state! == State.success && (
           <div>
+            
             {loading && <Loading message={message} network={network} />}
             <main>
               <div className="flex">
@@ -410,47 +464,7 @@ const selectRollup = async (network:any)=> {
                     </a>
                   </p>
 
-                  {/* {safe == undefined ? (
-                    <div style={{ width: "350px", margin: "25px auto 10px" }}>
-                      <p style={{ fontWeight: "600" }}>Your Safe</p>
-                      <p className="highlight">
-                      <a
-                            href={`${network.config.blockExplorers.default.url}/address/${safe}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            {safe.substring(0, 6) +
-                              "..." +
-                              safe.substring(safe.length - 6, safe.length)}
-                            <span
-                              style={{
-                                position: "relative",
-                                top: "5px",
-                                left: "5px",
-                              }}
-                            >
-                              <BiCopy
-                                cursor={"pointer"}
-                                color="white"
-                                fontSize={"20px"}
-                                onClick={() => onCopy(safe!)}
-                              />
-                            </span>
-                          </a>
-                      </p>
-                    </div>
-                  ) : (
-                    <div>
-                      <p style={{ fontWeight: "600" }}>
-                        No safes associated to this user
-                      </p>
-                      <Button ready={ready} onClick={() => onAction(1)}>
-                        {" "}
-                        Get Safe Address
-                      </Button>
-                    </div>
-                  )} */}
-                  {safe == undefined && (
+                
                     <div>
                       <p style={{ fontWeight: "600" }}>
                         Counter:
@@ -503,7 +517,7 @@ const selectRollup = async (network:any)=> {
                        Increment
                       </Button>
                     </div>
-                  )}
+               
                 </div>
                   ) : (
                     <div></div>
@@ -535,7 +549,23 @@ const selectRollup = async (network:any)=> {
             </Button>
           </div>
         )}
-       </div>}></Route>
+       </div>
+      ):( <div>
+
+           <div style={{ textAlign: "center", marginTop: "80px" }}>
+         
+            <h2 style={{margin:'5px auto 30px'}}> Are you alive?</h2>
+            <p>Liveness check powered by</p>
+            <img style={{margin:'5px auto 30px'}}src={web3AuthLogo} width={150}  /> 
+            <Button status={connectStatus} ready={ready} onClick={onLiveness}>
+              <span style={{ position: "relative", top: "0px" }}>Check</span>
+            </Button>
+          </div>
+      </div>)}
+       </div>
+      }>
+
+      </Route>
        </Routes>
       </div>
     </div>
