@@ -2,9 +2,13 @@ import { useEffect, useState } from "react";
 import { Status, State, TaskState, Message } from "../../types/Status";
 import { BiRefresh, BiCopy } from "react-icons/bi";
 import { interval, Subject, takeUntil } from "rxjs";
-import {  } from "ethers";
-import web3AuthLogo from "../../assets/images/web-3-auth-logo-dark.svg"
-import { CHAIN_NAMESPACES, WALLET_ADAPTERS } from "@web3auth/base";
+import {} from "ethers";
+import web3AuthLogo from "../../assets/images/web-3-auth-logo-dark.svg";
+import {
+  CHAIN_NAMESPACES,
+  WALLET_ADAPTERS,
+  CustomChainConfig,
+} from "@web3auth/base";
 import { Web3Auth } from "@web3auth/modal";
 import { Dropdown } from "react-dropdown-now";
 import "react-dropdown-now/style.css";
@@ -13,45 +17,54 @@ import "./style.css";
 import axios from "axios";
 import Loading from "../Loading";
 import Button from "../Button";
-import { Link, Route, Routes,useLocation,useParams,useNavigate } from "react-router-dom"
-import "./globals"
-import { ethers , Signer, Contract} from "ethers";
-import { LivenessEmbed } from  "@web3auth/kyc-embed";
+import {
+  Link,
+  Route,
+  Routes,
+  useLocation,
+  useParams,
+  useNavigate,
+} from "react-router-dom";
+import "./globals";
+import { ethers, Signer, Contract } from "ethers";
+import { LivenessEmbed } from "@web3auth/kyc-embed";
 
 import { counterAbi } from "../../assets/contracts/counterAbi";
 
 import "react-dropdown-now/style.css";
 
-
 import { RAAS_NETWORKS } from "../../networks";
 import { GELATO_KEY } from "../../constants";
-import { CallWithERC2771Request, GelatoRelay, SignerOrProvider } from "@gelatonetwork/relay-sdk";
-
-
+import {
+  CallWithERC2771Request,
+  GelatoRelay,
+  SignerOrProvider,
+} from "@gelatonetwork/relay-sdk";
+import { EthereumPrivateKeyProvider } from "@web3auth/ethereum-provider";
+import { fetchStatusSocket } from "./task";
+import { OpenloginAdapter } from "@web3auth/openlogin-adapter";
 
 const App = () => {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
 
   const embedInstance = new LivenessEmbed({
-    web3AuthClientId: "BFolnrXUpJ8WScbI0MHGllgsP4Jgyy9tuAyfd4rLJ0d07b1iGMhZw3Eu2E10HECY2KIqYczag4_Z4q7KsEojUWU",
-    web3AuthNetwork:  "sapphire_devnet",
+    web3AuthClientId:
+      "BFolnrXUpJ8WScbI0MHGllgsP4Jgyy9tuAyfd4rLJ0d07b1iGMhZw3Eu2E10HECY2KIqYczag4_Z4q7KsEojUWU",
+    web3AuthNetwork: "sapphire_devnet",
   });
 
-  
-  let destroyFetchTask: Subject<void> = new Subject();
-  let txHash: string | undefined;
-  const query = useQuery()
+  const query = useQuery();
   let networkSearch = query.get("network");
 
-  if (networkSearch == null || RAAS_NETWORKS[networkSearch] == undefined ){
-    networkSearch = 'blueberry'
+  if (networkSearch == null || RAAS_NETWORKS[networkSearch] == undefined) {
+    networkSearch = "blueberry";
   }
 
-  let network = RAAS_NETWORKS[networkSearch!]
+  let network = RAAS_NETWORKS[networkSearch!];
 
   const targetAddress = network.simpleCounter;
-  const GELATO_RELAY_API_KEY = GELATO_KEY[networkSearch!]
-  const rollups:string[] = ['blueberry','raspberry','blackberry']
+  const GELATO_RELAY_API_KEY = GELATO_KEY[networkSearch!];
+  const rollups: string[] = ["blueberry", "raspberry", "blackberry"];
 
   const [counterContract, setCounterContract] = useState<Contract>();
   const [ready, setReady] = useState(false);
@@ -65,7 +78,7 @@ const App = () => {
     taskId: undefined,
   });
   const [counter, setCounter] = useState<string>("Loading");
-  const [liveness, setLiveness] = useState<boolean>(false)
+  const [liveness, setLiveness] = useState<boolean>(false);
   const [signerAddress, setSignerAddress] = useState<string | null>(null);
 
   const [connectStatus, setConnectStatus] = useState<Status | null>({
@@ -73,49 +86,46 @@ const App = () => {
     message: "Loading",
   });
 
-const selectRollup = async (network:any)=> {
-  console.log(network)
-  navigate(`/?network=${network.value}`)
-}
+  const selectRollup = async (network: any) => {
+   
+    navigate(`/?network=${network.value}`);
+  };
 
-const cb=async (method:string,params?:any) => {
-  console.log(method)
-  console.log(params)
-  if (method === "on_cancelled_liveness") {
-    console.log("user has cancelled the liveness check before finished");
-    // do your thing   
-  } else  if(method == "on_complete_liveness") {
-    let isAlive = params.result == "Success" ? true :false
-     
-     if (isAlive){
-          setLiveness(true)
-       }
-  }
-}
+  const cb = async (method: string, params?: any) => {
+  
+    if (method === "on_cancelled_liveness") {
+      console.log("user has cancelled the liveness check before finished");
+      // do your thing
+    } else if (method == "on_complete_liveness") {
+      let isAlive = params.result == "Success" ? true : false;
 
-const onLiveness= async () => {
-  setLoading(true);
-  setConnectStatus({
-    state: State.failed,
-    message: "Waiting for Disconnection",
-  });
+      if (isAlive) {
+        setLiveness(true);
+      }
+    }
+  };
 
- if(!embedInstance.isInitialized){
-  console.log(362)
-  await embedInstance.init();
-  embedInstance.subscribeEvents(cb);
+  const onLiveness = async () => {
+    setLoading(true);
+    setConnectStatus({
+      state: State.failed,
+      message: "Waiting for Disconnection",
+    });
 
- }
+    if (!embedInstance.isInitialized) {
+    
+      await embedInstance.init();
+      embedInstance.subscribeEvents(cb);
+    }
 
- 
-  embedInstance.initLivenessCheck({
-    // this field is intended for the usage before login
-    // setting this to `true` will allow users to access the liveness check without logging in
-    // for the liveness check usage after login, please see the next section
-    allowUnauthenticatedAccess: true,
-  });
-  setLoading(false);
-};
+    embedInstance.initLivenessCheck({
+      // this field is intended for the usage before login
+      // setting this to `true` will allow users to access the liveness check without logging in
+      // for the liveness check usage after login, please see the next section
+      allowUnauthenticatedAccess: true,
+    });
+    setLoading(false);
+  };
 
   const onDisconnect = async () => {
     setLoading(true);
@@ -128,45 +138,14 @@ const onLiveness= async () => {
   };
 
   const onConnect = async () => {
-
     try {
-      const web3auth = new Web3Auth({
-        clientId:
-          "BFolnrXUpJ8WScbI0MHGllgsP4Jgyy9tuAyfd4rLJ0d07b1iGMhZw3Eu2E10HECY2KIqYczag4_Z4q7KsEojUWU", // get it from Web3Auth Dashboard
-        web3AuthNetwork: "sapphire_devnet",
-        chainConfig: {
-          chainNamespace: "eip155",
-          chainId: ethers.toBeHex(network.config.id),
-          rpcTarget: network.config.rpcUrls.default.http,
-          // Avoid using public rpcTarget in production.
-          // Use services like Infura, Quicknode etc
-          displayName: network.config.name as string,
-          blockExplorer: network.config.blockExplorers.default.url,
-          ticker: "ETH",
-          tickerName: "ETH",
-        },
-      });
-  
-      await web3auth!.initModal({
-        modalConfig: {
-         
-           // Disable TORUS
-           [WALLET_ADAPTERS.TORUS_EVM]: {
-            label: "torus",
-            showOnModal: false,
-          },
-        },
-      });
+      console.log(web3auth);
 
-   
       const web3authProvider = await web3auth!.connect();
-
-
 
       const provider = new ethers.BrowserProvider(web3authProvider!);
       setWeb3auth(web3auth);
       refresh(provider);
-      
 
       return;
     } catch (error) {}
@@ -184,7 +163,6 @@ const onLiveness= async () => {
   const onAction = async (action: number) => {
     switch (action) {
       case 0:
-
         increment();
 
         break;
@@ -195,8 +173,7 @@ const onLiveness= async () => {
     }
   };
 
-  const increment= async () => {
-
+  const increment = async () => {
     try {
       setMessage({
         header: "Waiting for tx...",
@@ -205,14 +182,11 @@ const onLiveness= async () => {
       });
       setLoading(true);
 
-   
       let tmpCountercontract = await getCounterContract(provider!);
       const { data: dataCounter } =
-      await tmpCountercontract!.increment.populateTransaction();
+        await tmpCountercontract!.increment.populateTransaction();
       const chainId = (await provider!.getNetwork()).chainId;
-   
-      let web3AuthSigner  = signer;
-   
+
       const relay = new GelatoRelay();
       const request: CallWithERC2771Request = {
         chainId,
@@ -220,122 +194,38 @@ const onLiveness= async () => {
         data: dataCounter as string,
         user: signerAddress as string,
       };
-  
+
       const response = await relay.sponsoredCallERC2771(
         request,
         signer! as unknown as SignerOrProvider,
         GELATO_RELAY_API_KEY as string
       );
-      console.log(`https://relay.gelato.digital/tasks/status/${response.taskId}`);
-     
+      console.log(
+        `https://relay.gelato.digital/tasks/status/${response.taskId}`
+      );
 
-      setMessage({
-        header: "Relaying tx",
-        body: "Waiting....",
-        taskId: undefined,
-      });
-
-      fetchStatus(response.taskId);
+      const relayStatusWs = new WebSocket(
+        "wss://api.gelato.digital/tasks/ws/status"
+      );
+      relayStatusWs.onopen = (event) => {
+        relayStatusWs.send(
+          JSON.stringify({
+            action: "subscribe" as string,
+            taskId: response.taskId,
+          })
+        );
+        relayStatusWs.onmessage = (event) => {
+          fetchStatusSocket(
+            JSON.parse(event.data).payload,
+            setMessage,
+            setLoading
+          );
+        };
+      };
     } catch (error) {
       console.log(error);
       setLoading(false);
     }
-  };
-
-
-
-  const fetchStatus = async (taskIdToQuery: string) => {
-    console.log(taskIdToQuery);
-
-    const numbers = interval(1000);
-
-    const takeFourNumbers = numbers.pipe(takeUntil(destroyFetchTask));
-
-    takeFourNumbers.subscribe(async (x) => {
-      try {
-        // let status = await relay.getTaskStatus(taskIdToQuery);
-        const res = await axios.get(
-          `https://relay.gelato.digital/tasks/status/${taskIdToQuery}`
-        );
-
-        let status = res.data.task;
-
-        let details = {
-          txHash: status?.transactionHash || undefined,
-          chainId: status?.chainId?.toString() || undefined,
-          blockNumber: status?.blockNumber?.toString() || undefined,
-          executionDate: status?.executionDate || undefined,
-          creationnDate: status?.creationDate || undefined,
-          taskState: (status?.taskState as TaskState) || undefined,
-        };
-        let body = ``;
-        let header = ``;
-
-        txHash = details.txHash;
-
-
-        switch (details.taskState!) {
-          case TaskState.WaitingForConfirmation:
-            header = `Transaction Relayed`;
-            body = `Waiting for Confirmation`;
-            break;
-          case TaskState.Pending:
-            header = `Transaction Relayed`;
-            body = `Pending Status`;
-
-            break;
-          case TaskState.CheckPending:
-            header = `Transaction Relayed`;
-            body = `Simulating Transaction`;
-
-            break;
-          case TaskState.ExecPending:
-            header = `Transaction Relayed`;
-            body = `Pending Execution`;
-            break;
-          case TaskState.ExecSuccess:
-            header = `Transaction Executed`;
-            body = `Waiting to refresh...`;
-
-            destroyFetchTask.next();
-            setTimeout(() => {
-              doRefresh();
-            }, 2000);
-
-            break;
-          case TaskState.Cancelled:
-            header = `Canceled`;
-            body = `TxHash: ${details.txHash}`;
-            destroyFetchTask.next();
-            break;
-          case TaskState.ExecReverted:
-            header = `Reverted`;
-            body = `TxHash: ${details.txHash}`;
-            destroyFetchTask.next();
-            break;
-          case TaskState.NotFound:
-            header = `Not Found`;
-            body = `TxHash: ${details.txHash}`;
-            destroyFetchTask.next();
-            break;
-          case TaskState.Blacklisted:
-            header = `BlackListed`;
-            body = `TxHash: ${details.txHash}`;
-            destroyFetchTask.next();
-            break;
-          default:
-            break;
-        }
-
-        setMessage({
-          header,
-          body,
-          taskId: txHash,
-        });
-      } catch (error) {
-        console.log(error);
-      }
-    });
   };
 
   const doRefresh = async () => {
@@ -361,7 +251,6 @@ const onLiveness= async () => {
     });
     await getCounter(provider);
     setLoading(false);
-
   };
 
   const getCounterContract = async (provider: ethers.BrowserProvider) => {
@@ -377,7 +266,6 @@ const onLiveness= async () => {
     }
   };
 
-
   const getCounter = async (provider: ethers.BrowserProvider) => {
     const contract = await getCounterContract(provider);
 
@@ -388,24 +276,83 @@ const onLiveness= async () => {
   function useQuery() {
     // Use the URLSearchParams API to extract the query parameters
     // useLocation().search will have the query parameters eg: ?foo=bar&a=b
-    return new URLSearchParams(useLocation().search)
+    return new URLSearchParams(useLocation().search);
   }
-
-
-  
 
   useEffect(() => {
     (async () => {
+      if (web3auth == null) {
+        const chainConfig: CustomChainConfig = {
+          chainNamespace: "eip155",
+          chainId: ethers.toBeHex(network.config.id),
+          rpcTarget: network.config.rpcUrls.default.http,
+          // Avoid using public rpcTarget in production.
+          // Use services like Infura, Quicknode etc
+          displayName: network.config.name as string,
+          blockExplorerUrl: network.config.blockExplorers.default.url,
+          ticker: "ETH",
+
+          tickerName: "ETH",
+        };
+
+        const ethereumPrivateKeyProvider = new EthereumPrivateKeyProvider({
+          config: { chainConfig },
+        });
+
+        const web3authInstance = new Web3Auth({
+          clientId:
+            "BFolnrXUpJ8WScbI0MHGllgsP4Jgyy9tuAyfd4rLJ0d07b1iGMhZw3Eu2E10HECY2KIqYczag4_Z4q7KsEojUWU", // get it from Web3Auth Dashboard
+          web3AuthNetwork: "sapphire_devnet",
+          uiConfig: {
+            appName: "On Gelato Web3Auth",
+            mode: "dark",
+            theme: {
+              primary: "#f5c2a5",
+            },
+          },
+          privateKeyProvider: ethereumPrivateKeyProvider,
+        });
+
+        const openloginAdapter = new OpenloginAdapter({
+          adapterSettings: {
+            //clientId, //Optional - Provide only if you haven't provided it in the Web3Auth Instantiation Code
+            network: "sapphire_mainnet", // Optional - Provide only if you haven't provided it in the Web3Auth Instantiation Code
+            uxMode: "popup",
+            whiteLabel: {
+              appName: "W3A Heroes",
+              appUrl: "https://on-gelato-web3auth.web.app/",
+              logoLight: "https://raas.gelato.network/images/GelatoLogo.svg",
+              logoDark: "https://raas.gelato.network/images/GelatoLogo.svg",
+              defaultLanguage: "en", // en, de, ja, ko, zh, es, fr, pt, nl, tr
+              mode: "dark", // whether to enable dark mode. defaultValue: auto
+              theme: {
+                primary: "#00D1B2",
+              },
+              useLogoLoader: true,
+            },
+          },
+        });
+        await web3authInstance.configureAdapter(openloginAdapter);
+
+        await web3authInstance!.initModal({
+          modalConfig: {
+            // Disable TORUS
+            [WALLET_ADAPTERS.TORUS_EVM]: {
+              label: "torus",
+              showOnModal: false,
+            },
+          },
+        });
+        setWeb3auth(web3authInstance);
+      }
+
       if (provider != null) {
         return;
       }
-
-
-      if (networkSearch == null || RAAS_NETWORKS[networkSearch] == undefined ){
-    
-        navigate('/?network=blueberry')
+      if (networkSearch == null || RAAS_NETWORKS[networkSearch] == undefined) {
+        navigate("/?network=blueberry");
       }
-    
+
       setConnectStatus({
         state: State.failed,
         message: "Waiting for Disconnection",
@@ -423,150 +370,190 @@ const onLiveness= async () => {
           onDisconnect={onDisconnect}
           signerAddress={signerAddress}
         />
-           <Routes>
-       <Route path="/" element=
-       {
-        <div>
-      {liveness ? (
-       <div>
-        {connectStatus?.state! == State.success && (
-          <div>
-            
-            {loading && <Loading message={message} network={network} />}
-            <main>
-              <div className="flex">
-                <p className="title">We3Auth on {network.config.name}</p>
-                {signerAddress != undefined ? (
-                <div className="isDeployed">
-                  <p>User:</p>
-                  <p className="highlight">
-                  <a
-                        href={`${network.config.blockExplorers.default.url}/address/${signerAddress}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {signerAddress.substring(0, 6) +
-                          "..." +
-                          signerAddress.substring(
-                            signerAddress.length - 6,
-                            signerAddress.length
-                          )}
-                    <span
-                      style={{ position: "relative", top: "5px", left: "5px" }}
-                    >
-                      <BiCopy
-                        cursor={"pointer"}
-                        color="white"
-                        fontSize={"20px"}
-                        onClick={() => onCopy(signerAddress!)}
-                      />
-                    </span>
-                    </a>
-                  </p>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <div>
+                {liveness ? (
+                  <div>
+                    {connectStatus?.state! == State.success && (
+                      <div>
+                        {loading && (
+                          <Loading message={message} network={network} />
+                        )}
+                        <main>
+                          <div className="flex">
+                            <p className="title">
+                              We3Auth on {network.config.name}
+                            </p>
+                            {signerAddress != undefined ? (
+                              <div className="isDeployed">
+                                <p>User:</p>
+                                <p className="highlight">
+                                  <a
+                                    href={`${network.config.blockExplorers.default.url}/address/${signerAddress}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    {signerAddress.substring(0, 6) +
+                                      "..." +
+                                      signerAddress.substring(
+                                        signerAddress.length - 6,
+                                        signerAddress.length
+                                      )}
+                                    <span
+                                      style={{
+                                        position: "relative",
+                                        top: "5px",
+                                        left: "5px",
+                                      }}
+                                    >
+                                      <BiCopy
+                                        cursor={"pointer"}
+                                        color="white"
+                                        fontSize={"20px"}
+                                        onClick={() => onCopy(signerAddress!)}
+                                      />
+                                    </span>
+                                  </a>
+                                </p>
 
-                
-                    <div>
-                      <p style={{ fontWeight: "600" }}>
-                        Counter:
-                        <span
-                          style={{ marginLeft: "10px", fontSize: "15px" }}
-                          className="highlight"
+                                <div>
+                                  <p style={{ fontWeight: "600" }}>
+                                    Counter:
+                                    <span
+                                      style={{
+                                        marginLeft: "10px",
+                                        fontSize: "15px",
+                                      }}
+                                      className="highlight"
+                                    >
+                                      {counter}
+                                      <span
+                                        style={{
+                                          position: "relative",
+                                          top: "5px",
+                                        }}
+                                      >
+                                        <BiRefresh
+                                          color="white"
+                                          cursor={"pointer"}
+                                          fontSize={"20px"}
+                                          onClick={doRefresh}
+                                        />
+                                      </span>
+                                    </span>
+                                  </p>
+                                  <p className="highlight">
+                                    <a
+                                      href={`${network.config.blockExplorers.default.url}/address/${network.simpleCounter}?tab=read_contract`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                    >
+                                      {network.simpleCounter.substring(0, 6) +
+                                        "...." +
+                                        network.simpleCounter.substring(
+                                          network.simpleCounter.length - 6,
+                                          network.simpleCounter.length
+                                        )}
+                                      <span
+                                        style={{
+                                          position: "relative",
+                                          top: "5px",
+                                          left: "5px",
+                                        }}
+                                      >
+                                        <BiCopy
+                                          cursor={"pointer"}
+                                          color="white"
+                                          fontSize={"20px"}
+                                          onClick={() =>
+                                            onCopy(network.simpleCounter)
+                                          }
+                                        />
+                                      </span>
+                                    </a>
+                                  </p>
+                                  <Button
+                                    ready={ready}
+                                    onClick={() => onAction(0)}
+                                  >
+                                    {" "}
+                                    Increment
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div></div>
+                            )}
+                          </div>
+                        </main>
+                      </div>
+                    )}{" "}
+                    {connectStatus?.state! == State.missing && (
+                      <p style={{ textAlign: "center" }}>Metamask not Found</p>
+                    )}
+                    {(connectStatus?.state == State.pending ||
+                      connectStatus?.state == State.failed) && (
+                      <div style={{ textAlign: "center", marginTop: "20px" }}>
+                        <div style={{ width: "300px", margin: "0 auto 30px" }}>
+                          <h4 style={{ margin: "5px auto 5px" }}>
+                            {" "}
+                            Choose Your Gelato RollUp
+                          </h4>
+                          <Dropdown
+                            placeholder="Select an option"
+                            options={rollups}
+                            value={networkSearch}
+                            onSelect={(value: any) => selectRollup(value)}
+                          />
+                        </div>
+                        <h3 style={{ margin: "5px auto 5px" }}>
+                          {" "}
+                          Please Sign In
+                        </h3>
+                        <Button
+                          status={connectStatus}
+                          ready={ready}
+                          onClick={onConnect}
                         >
-                       
-                       {counter}
-                          <span style={{ position: "relative", top: "5px" }}>
-                            <BiRefresh
-                              color="white"
-                              cursor={"pointer"}
-                              fontSize={"20px"}
-                              onClick={doRefresh}
-                            />
+                          <span style={{ position: "relative", top: "0px" }}>
+                            Sign In
                           </span>
-                        </span>
-                       
-                      </p>
-                      <p className="highlight">
-                          <a
-                            href={`${network.config.blockExplorers.default.url}/address/${network.simpleCounter}?tab=read_contract`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            {network.simpleCounter.substring(0,6)+'....'+network.simpleCounter.substring(network.simpleCounter.length-6,network.simpleCounter.length)}
-                            <span
-                              style={{
-                                position: "relative",
-                                top: "5px",
-                                left: "5px",
-                              }}
-                            >
-                              <BiCopy
-                                cursor={"pointer"}
-                                color="white"
-                                fontSize={"20px"}
-                                onClick={() =>
-                                  onCopy(
-                                    network.simpleCounter
-                                  )
-                                }
-                              />
-                            </span>
-                          </a>
-                        </p>
-                      <Button ready={ready} onClick={() => onAction(0)}>
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ textAlign: "center", marginTop: "80px" }}>
+                      <h2 style={{ margin: "5px auto 30px" }}>
                         {" "}
-                       Increment
+                        Are you alive?
+                      </h2>
+                      <p>Liveness check powered by</p>
+                      <img
+                        style={{ margin: "5px auto 30px" }}
+                        src={web3AuthLogo}
+                        width={150}
+                      />
+                      <Button
+                        status={connectStatus}
+                        ready={ready}
+                        onClick={onLiveness}
+                      >
+                        <span style={{ position: "relative", top: "0px" }}>
+                          Check
+                        </span>
                       </Button>
                     </div>
-               
-                </div>
-                  ) : (
-                    <div></div>
-                  )}
+                  </div>
+                )}
               </div>
-            </main>
-          </div>
-        )}{" "}
-        {connectStatus?.state! == State.missing && (
-          <p style={{ textAlign: "center" }}>Metamask not Found</p>
-        )}
-        {(connectStatus?.state == State.pending ||
-          connectStatus?.state == State.failed) && (
-          <div style={{ textAlign: "center", marginTop: "20px" }}>
-            <div style={{width:'300px',margin:'0 auto 30px'}}>
-            <h4 style={{margin:'5px auto 5px'}}> Choose Your Gelato RollUp</h4>
-                <Dropdown
-                              
-                                  placeholder="Select an option"
-                                  options={rollups}
-                                  value={networkSearch}
-                                  onSelect={(value: any) => selectRollup(value)}
-                                
-                                />
-               </div>
-            <h3 style={{margin:'5px auto 5px'}}> Please Sign In</h3>
-            <Button status={connectStatus} ready={ready} onClick={onConnect}>
-              <span style={{ position: "relative", top: "0px" }}>Sign In</span>
-            </Button>
-          </div>
-        )}
-       </div>
-      ):( <div>
-
-           <div style={{ textAlign: "center", marginTop: "80px" }}>
-         
-            <h2 style={{margin:'5px auto 30px'}}> Are you alive?</h2>
-            <p>Liveness check powered by</p>
-            <img style={{margin:'5px auto 30px'}}src={web3AuthLogo} width={150}  /> 
-            <Button status={connectStatus} ready={ready} onClick={onLiveness}>
-              <span style={{ position: "relative", top: "0px" }}>Check</span>
-            </Button>
-          </div>
-      </div>)}
-       </div>
-      }>
-
-      </Route>
-       </Routes>
+            }
+          ></Route>
+        </Routes>
       </div>
     </div>
   );
