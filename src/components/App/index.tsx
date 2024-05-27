@@ -47,11 +47,7 @@ import { OpenloginAdapter } from "@web3auth/openlogin-adapter";
 const App = () => {
   const navigate = useNavigate();
 
-  const embedInstance = new LivenessEmbed({
-    web3AuthClientId:
-      "BFolnrXUpJ8WScbI0MHGllgsP4Jgyy9tuAyfd4rLJ0d07b1iGMhZw3Eu2E10HECY2KIqYczag4_Z4q7KsEojUWU",
-    web3AuthNetwork: "sapphire_devnet",
-  });
+
 
   const query = useQuery();
   let networkSearch = query.get("network");
@@ -68,6 +64,7 @@ const App = () => {
 
   const [counterContract, setCounterContract] = useState<Contract>();
   const [ready, setReady] = useState(false);
+  const [embedInstance,setEmbedInstance ] = useState<LivenessEmbed |null>(null)
   const [web3auth, setWeb3auth] = useState<Web3Auth | null>(null);
   const [provider, setProvider] = useState<ethers.BrowserProvider | null>(null);
   const [signer, setSigner] = useState<Signer | null>(null);
@@ -112,13 +109,7 @@ const App = () => {
       message: "Waiting for Disconnection",
     });
 
-    if (!embedInstance.isInitialized) {
-    
-      await embedInstance.init();
-      embedInstance.subscribeEvents(cb);
-    }
-
-    embedInstance.initLivenessCheck({
+    embedInstance!.initLivenessCheck({
       // this field is intended for the usage before login
       // setting this to `true` will allow users to access the liveness check without logging in
       // for the liveness check usage after login, please see the next section
@@ -139,7 +130,7 @@ const App = () => {
 
   const onConnect = async () => {
     try {
-      console.log(web3auth);
+    
 
       const web3authProvider = await web3auth!.connect();
 
@@ -344,6 +335,20 @@ const App = () => {
           },
         });
         setWeb3auth(web3authInstance);
+      }
+
+      if (embedInstance == null){
+        const embedInstance = new LivenessEmbed({
+          web3AuthClientId:
+            "BFolnrXUpJ8WScbI0MHGllgsP4Jgyy9tuAyfd4rLJ0d07b1iGMhZw3Eu2E10HECY2KIqYczag4_Z4q7KsEojUWU",
+          web3AuthNetwork: "sapphire_devnet",
+        });
+        if (!embedInstance!.isInitialized) {
+    
+          await embedInstance!.init();
+          embedInstance!.subscribeEvents(cb);
+        }
+        setEmbedInstance(embedInstance)
       }
 
       if (provider != null) {
